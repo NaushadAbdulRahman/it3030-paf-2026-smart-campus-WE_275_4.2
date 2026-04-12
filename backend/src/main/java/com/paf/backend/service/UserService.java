@@ -62,6 +62,13 @@ public class UserService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
+    public List<UserResponse> getUsersByRole(Role role) {
+        return userRepository.findByRole(role).stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
     public UserResponse updateRole(Long userId, RoleUpdateRequest request, String adminEmail) {
         // Verify requester is admin
         User admin = getOrCreateUser(adminEmail);
