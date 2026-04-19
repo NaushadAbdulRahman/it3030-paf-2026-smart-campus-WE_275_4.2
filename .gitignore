@@ -1,0 +1,115 @@
+# ========================================
+# PAF Assignment - Project .gitignore
+# ========================================
+
+# BACKEND (Maven/Spring Boot)
+# ========================================
+backend/target/
+backend/target/**
+backend/.classpath
+backend/.project
+backend/.settings/
+backend/*.jar
+backend/*.war
+backend/bin/
+backend/dist/
+backend/*.log
+backend/test_build.log
+
+# IDEs
+# ========================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.iml
+*.iws
+*.ipr
+.DS_Store
+
+# FRONTEND (Node.js/React)
+# ========================================
+frontend/node_modules/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/build/
+frontend/dist/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# OS Files
+# ========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary Files
+# ========================================
+*.tmp
+*.temp
+*.bak
+*.backup
+.tmp/
+temp/
+tmp/
+
+# Database Files
+# ========================================
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# Build Outputs
+# ========================================
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+dist/
+build/
+
+# Dependencies Lock Files (Optional - uncomment if needed)
+# ========================================
+# package-lock.json
+# yarn.lock
+
+# Test Coverage
+# ========================================
+coverage/
+.nyc_output/
+
+# Environment Files
+# ========================================
+.env
+.env.local
+.env.*.local
+
+# Miscellaneous
+# ========================================
+.venv/
+venv/
+ENV/
+env/
+*.pyc
+__pycache__/
+
+# ========================================
+# KEEP THESE FILES
+# ========================================
+# pom.xml - Maven configuration
+# package.json - npm configuration
+# application.properties - Spring Boot config
+# src/ - Source code
+# public/ - Frontend static files
+# Documentation files (.md)
+
