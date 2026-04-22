@@ -118,6 +118,7 @@ public class TicketMapper {
     public StatusHistoryResponse toHistoryResponse(TicketStatusHistory h) {
         return StatusHistoryResponse.builder()
                 .id(h.getId())
+                .ticketId(h.getTicket().getId())  // ✅ ADD THIS
                 .fromStatus(h.getFromStatus())
                 .toStatus(h.getToStatus())
                 .changedBy(h.getChangedBy())

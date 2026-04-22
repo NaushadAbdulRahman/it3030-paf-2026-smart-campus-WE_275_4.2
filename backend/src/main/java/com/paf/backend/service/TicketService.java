@@ -164,14 +164,17 @@ public class TicketService {
 
         ticket.setAssignedTo(request.getTechnicianId());
 
+        // ONLY create history if status actually changes
         if (ticket.getStatus() == TicketStatus.OPEN) {
+            TicketStatus oldStatus = ticket.getStatus();
+
             ticket.setStatus(TicketStatus.IN_PROGRESS);
-            saveHistory(ticket, TicketStatus.OPEN, TicketStatus.IN_PROGRESS,
+
+            saveHistory(ticket, oldStatus, TicketStatus.IN_PROGRESS,
                     currentUser, "Assigned to " + request.getTechnicianId());
-        } else {
-            saveHistory(ticket, ticket.getStatus(), ticket.getStatus(),
-                    currentUser, "Reassigned to " + request.getTechnicianId());
         }
+
+        // ❌ NO history for reassignment without status change
 
         return ticketMapper.toSummaryResponse(ticketRepository.save(ticket));
     }
