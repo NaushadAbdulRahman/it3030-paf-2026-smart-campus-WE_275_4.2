@@ -1,0 +1,20 @@
+.workload-suggestion-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  background: rgba(0, 212, 170, 0.08);
+  border: 1px solid rgba(0, 212, 170, 0.2);
+  border-radius: var(--radius-lg);
+  margin-bottom: 28px;
+}
+
+.workload-card {
+  padding: 20px 24px;
+}
+
+.workload-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+}
+
