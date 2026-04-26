@@ -42,6 +42,17 @@ public class UserController {
     }
 
     /**
+     * GET /api/users/role/{role} — Returns users with a specific role
+     */
+    @GetMapping("/role/{role}")
+    public ResponseEntity<ApiResponse<List<UserResponse>>> getUsersByRole(
+            @PathVariable Role role) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Users filtered by role", userService.getUsersByRole(role)));
+    }
+
+    /**
      * PUT /api/users/{id}/role — Admin changes a user's role
      */
     @PutMapping("/{id}/role")
