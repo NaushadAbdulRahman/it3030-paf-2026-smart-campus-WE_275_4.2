@@ -21,7 +21,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/bookings")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
 public class BookingController {
 
     private final BookingService bookingService;
@@ -119,3 +118,4 @@ public class BookingController {
         return ResponseEntity.ok(ApiResponse.success("Booking stats", stats));
     }
 }
+

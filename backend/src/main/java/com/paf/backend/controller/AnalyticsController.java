@@ -14,7 +14,6 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/analytics") // ✅ base path
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:3000")
 public class AnalyticsController {
 
     private final AnalyticsService analyticsService;

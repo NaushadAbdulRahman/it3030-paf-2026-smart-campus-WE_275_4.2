@@ -33,7 +33,13 @@
 - Cross-origin requests will work seamlessly
 - Proxy configured in package.json
 
-### 5. **Comprehensive Documentation** ✅
+### 5. **Deployment-Friendly Configuration** ✅
+- Frontend/backend URLs can now be changed with environment variables
+- OAuth redirects use the configured frontend URL instead of a hardcoded port
+- Secrets stay in local `.env` files instead of tracked source code
+- Easier to deploy the same code to local, staging, and production environments
+
+### 6. **Comprehensive Documentation** ✅
 - **QUICK_START.md** - 5-minute setup guide
 - **SETUP_GUIDE.md** - Complete installation instructions
 - **DESIGN_GUIDE.md** - Design system documentation
@@ -43,7 +49,7 @@
 - **COMPLETION_CHECKLIST.md** - Verification checklist
 - **INDEX.md** - Documentation navigation
 
-### 6. **CVE Security Audit** ✅
+### 7. **CVE Security Audit** ✅
 - All direct dependencies are CVE-FREE
 - Audit completed and verified
 - Only transitive dev dependencies have known CVEs

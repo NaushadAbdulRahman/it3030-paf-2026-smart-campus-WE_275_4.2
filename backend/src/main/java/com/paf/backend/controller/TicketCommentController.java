@@ -16,7 +16,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/tickets/{ticketId}/comments")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
 public class TicketCommentController {
 
     private final TicketCommentService commentService;

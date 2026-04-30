@@ -19,7 +19,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/tickets/{ticketId}/attachments")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
 public class TicketAttachmentController {
 
     private final TicketAttachmentService attachmentService;
