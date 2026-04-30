@@ -8,6 +8,7 @@ import com.paf.backend.entity.enums.ResourceType;
 import com.paf.backend.entity.enums.ResourceTypeParser;
 import com.paf.backend.service.ResourceService;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -66,7 +67,7 @@ public class ResourceController {
 
     // --- Add Resource ---
     @PostMapping
-    public ResourceDTO addResource(@RequestBody Resource resource) {
+    public ResourceDTO addResource(@Valid @RequestBody Resource resource) {
         // Debug logging
         System.out.println("Received resource type: " + resource.getRawType());
         System.out.println("Parsed resource type: " + resource.getType());
@@ -96,7 +97,7 @@ public class ResourceController {
 
     // --- Update Resource ---
     @PutMapping("/{id}")
-    public ResourceDTO updateResource(@PathVariable Long id, @RequestBody Resource resource) {
+    public ResourceDTO updateResource(@PathVariable Long id, @Valid @RequestBody Resource resource) {
         return mapToDTO(resourceService.updateResource(id, resource));
     }
 

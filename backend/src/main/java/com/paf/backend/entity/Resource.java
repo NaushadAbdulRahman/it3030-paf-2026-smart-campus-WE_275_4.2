@@ -6,6 +6,8 @@ import com.paf.backend.entity.enums.ResourceStatus;
 import com.paf.backend.entity.enums.ResourceType;
 import com.paf.backend.entity.enums.ResourceTypeParser;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
 
@@ -19,21 +21,26 @@ public class Resource {
 
     /** Stored as string in database so legacy values (e.g. "MEETING ROOM") load without enum errors. */
     @JsonIgnore
+    @NotBlank(message = "Resource type is required")
     @Column(nullable = false)
     private String type;
 
+    @NotBlank(message = "Resource name is required")
     @Column(nullable = false)
     private String name;
     
     @Column(nullable = true)
     private Integer capacity;
 
+    @NotBlank(message = "Location is required")
     @Column(nullable = false)
     private String location;
 
+    @NotBlank(message = "Availability is required")
     @Column(nullable = false)
     private String availability; // e.g. "08:00-17:00"
 
+    @NotNull(message = "Status is required")
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ResourceStatus status; // ACTIVE / OUT_OF_SERVICE
