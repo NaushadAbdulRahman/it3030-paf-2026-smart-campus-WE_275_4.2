@@ -1,0 +1,9 @@
+.ticket-attachment-thumb {
+  aspect-ratio: 1;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid var(--border-dim);
+  background: var(--bg-elevated);
+}
+

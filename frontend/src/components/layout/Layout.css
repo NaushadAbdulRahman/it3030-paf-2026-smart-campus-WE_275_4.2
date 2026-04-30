@@ -1,0 +1,45 @@
+.layout-root {
+    display: flex;
+    min-height: 100vh;
+    background: var(--bg-base);
+    position: relative;
+}
+
+/* Main content area */
+.layout-main {
+    flex: 1;
+    margin-left: 240px; /* matches sidebar width */
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 1;
+}
+
+/* Page content */
+.layout-content {
+    flex: 1;
+    padding: 32px;
+}
+
+/* Optional visuals */
+.grid-bg {
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(
+            rgba(255, 255, 255, 0.03) 1px,
+            transparent 1px
+    ),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    z-index: 0;
+}
+
+.noise-overlay {
+    position: absolute;
+    inset: 0;
+    opacity: 0.05;
+    background: url("https://grainy-gradients.vercel.app/noise.svg");
+    pointer-events: none;
+    z-index: 0;
+}
