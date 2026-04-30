@@ -55,7 +55,7 @@ public class ResourceController {
 
         dto.setName(resource.getName());
 
-        // ✅ FIX: null-safe capacity — equipment types have null capacity, don't auto-unbox
+        // Null-safe capacity: equipment types can have null capacity, so avoid auto-unboxing.
         dto.setCapacity(resource.getCapacity()); // ResourceDTO.capacity must be Integer, not int
 
         dto.setLocation(resource.getLocation());
