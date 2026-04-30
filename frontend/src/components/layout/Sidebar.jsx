@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { gsap } from "gsap";
@@ -12,22 +12,39 @@ import {
     Users,
     ChevronRight,
     Zap,
+    ClipboardList,
+    Building2,
+    CalendarDays,
+    LogOut,
 } from "lucide-react";
-
-const NAV = [
-    { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-    { icon: Ticket, label: "All Tickets", path: "/tickets" },
-    { icon: Plus, label: "New Ticket", path: "/tickets/new", accent: true },
-    { icon: AlertTriangle, label: "Overdue", path: "/tickets/overdue" },
-    { icon: BarChart3, label: "Analytics", path: "/analytics" },
-    { icon: Users, label: "Workload", path: "/workload" },
-];
+import { useAuth } from "../../context/AuthContext";
 
 export default function Sidebar() {
     const location = useLocation();
     const logoRef = useRef(null);
     const navRef = useRef(null);
     const [collapsed, setCollapsed] = useState(false);
+    const { role, logout, isAuthenticated } = useAuth();
+
+    // Role-based navigation items
+    const NAV = useMemo(() => {
+        const items = [
+            { icon: LayoutDashboard, label: "Dashboard", path: "/", roles: ['USER', 'ADMIN', 'TECHNICIAN'] },
+            { icon: Building2, label: "Facilities", path: "/resources", roles: ['USER', 'ADMIN', 'TECHNICIAN'] },
+            { icon: CalendarDays, label: "My Bookings", path: "/bookings", roles: ['USER', 'ADMIN', 'TECHNICIAN'] },
+            { icon: Plus, label: "Book Resource", path: "/bookings/new", accent: true, roles: ['USER', 'ADMIN', 'TECHNICIAN'] },
+            { icon: CalendarDays, label: "Manage Bookings", path: "/admin/bookings", roles: ['ADMIN'] },
+            { icon: Ticket, label: "All Tickets", path: "/tickets", roles: ['ADMIN', 'TECHNICIAN'] },
+            { icon: ClipboardList, label: "My Tickets", path: "/tickets?mine=true", roles: ['USER'], matchPath: "/tickets" },
+            { icon: Plus, label: "New Ticket", path: "/tickets/new", accent: true, roles: ['USER', 'ADMIN'] },
+            { icon: AlertTriangle, label: "Overdue", path: "/tickets/overdue", roles: ['ADMIN', 'TECHNICIAN'] },
+            { icon: BarChart3, label: "Analytics", path: "/analytics", roles: ['ADMIN'] },
+            { icon: Users, label: "Workload", path: "/workload", roles: ['ADMIN', 'TECHNICIAN'] },
+            { icon: Users, label: "Users", path: "/users", roles: ['ADMIN'] },
+        ];
+
+        return items.filter(item => item.roles.includes(role));
+    }, [role]);
 
     useEffect(() => {
         const els = navRef.current?.querySelectorAll(".nv");
@@ -59,7 +76,7 @@ export default function Sidebar() {
                 }
             );
         }
-    }, []);
+    }, [role]);
 
     return (
         <motion.aside
@@ -135,14 +152,15 @@ export default function Sidebar() {
                     gap: 4,
                 }}
             >
-                {NAV.map(({ icon: Icon, label, path, accent }) => {
+                {NAV.map(({ icon: Icon, label, path, accent, matchPath }) => {
+                    const checkPath = matchPath || path;
                     const active =
-                        location.pathname === path ||
-                        (path !== "/" && location.pathname.startsWith(path));
+                        location.pathname === checkPath ||
+                        (checkPath !== "/" && location.pathname.startsWith(checkPath));
 
                     return (
                         <Link
-                            key={path}
+                            key={path + label}
                             to={path}
                             className="nv"
                             style={{
@@ -195,13 +213,42 @@ export default function Sidebar() {
                 })}
             </nav>
 
-            {/* ─── COLLAPSE BUTTON ───────────────────────── */}
+            {/* ─── LOGOUT + COLLAPSE ──────────────────── */}
             <div
                 style={{
                     padding: 12,
                     borderTop: "1px solid var(--border-subtle)",
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4,
                 }}
             >
+                {/* Logout */}
+                {isAuthenticated && (
+                    <button
+                        onClick={logout}
+                        style={{
+                            width: "100%",
+                            padding: 8,
+                            borderRadius: "var(--radius-md)",
+                            background: "transparent",
+                            color: "#ff5757",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: collapsed ? "center" : "flex-start",
+                            gap: 8,
+                            fontSize: "0.8rem",
+                            border: "1px solid rgba(255,87,87,0.2)",
+                            cursor: "pointer",
+                            transition: "all 0.15s ease",
+                        }}
+                    >
+                        <LogOut size={16} />
+                        {!collapsed && <span>Sign Out</span>}
+                    </button>
+                )}
+
+                {/* Collapse */}
                 <button
                     onClick={() => setCollapsed((c) => !c)}
                     style={{

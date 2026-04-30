@@ -1,13 +1,20 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X, SlidersHorizontal } from 'lucide-react';
+import { Search, X, ClipboardList } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
 import './TicketList.css';
 
 import Layout from '../components/layout/Layout';
 import TicketCard from '../components/tickets/TicketCard';
+import StatusFilterTabs from '../components/tickets/StatusFilterTabs';
 import { ticketApi } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 export default function TicketList() {
+    const { isUser, isAdmin } = useAuth();
+    const [searchParams] = useSearchParams();
+    const isMine = searchParams.get('mine') === 'true';
+
     const [data, setData] = useState({
         content: [],
         totalElements: 0,
@@ -17,19 +24,26 @@ export default function TicketList() {
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(0);
     const [search, setSearch] = useState('');
-    const [myTickets, setMyTickets] = useState(false);
-    const [showFilters, setShowFilters] = useState(false);
+    const [statusFilter, setStatusFilter] = useState('ALL');
+    const [myTickets, setMyTickets] = useState(isUser || isMine);
+
+    // Reset myTickets when role changes
+    useEffect(() => {
+        setMyTickets(isUser || isMine);
+    }, [isUser, isMine]);
 
     // ─── LOAD DATA ─────────────────────────────
     const load = useCallback(async () => {
         setLoading(true);
 
         try {
-            const result = await ticketApi.getAll({
+            const params = {
                 page,
                 size: 12,
-                myTickets,
-            });
+                myTickets: isUser ? true : myTickets,
+            };
+
+            const result = await ticketApi.getAll(params);
 
             // SAFE handling (array OR paginated)
             setData({
@@ -43,32 +57,58 @@ export default function TicketList() {
         } finally {
             setLoading(false);
         }
-    }, [page, myTickets]);
+    }, [page, myTickets, isUser]);
 
     useEffect(() => {
         void load();
     }, [load]);
 
-    // ─── FILTER SEARCH ─────────────────────────
-    const filtered = search.trim()
-        ? (data.content || []).filter((t) =>
-            t.title?.toLowerCase().includes(search.toLowerCase()) ||
-            t.description?.toLowerCase().includes(search.toLowerCase()) ||
-            t.location?.toLowerCase().includes(search.toLowerCase())
-        )
-        : data.content || [];
+    // ─── FILTER SEARCH + STATUS ─────────────────
+    let filtered = data.content || [];
+
+    // Status filter
+    if (statusFilter !== 'ALL') {
+        filtered = filtered.filter(t => t.status === statusFilter);
+    }
+
+    // Text search
+    if (search.trim()) {
+        const q = search.toLowerCase();
+        filtered = filtered.filter((t) =>
+            t.title?.toLowerCase().includes(q) ||
+            t.description?.toLowerCase().includes(q) ||
+            t.location?.toLowerCase().includes(q)
+        );
+    }
+
+    // Count by status for tabs
+    const statusCounts = (data.content || []).reduce((acc, t) => {
+        acc[t.status] = (acc[t.status] || 0) + 1;
+        return acc;
+    }, {});
+
+    const getTitle = () => {
+        if (isUser) return 'My Tickets';
+        if (myTickets) return 'My Tickets';
+        return 'All Tickets';
+    };
+
+    const getSubtitle = () => {
+        if (isUser) return `${data.totalElements} incidents reported by you`;
+        return `${data.totalElements} total incidents`;
+    };
 
     return (
         <Layout
-            title="All Tickets"
-            subtitle={`${data.totalElements} total incidents`}
+            title={getTitle()}
+            subtitle={getSubtitle()}
         >
             {/* ─── TOOLBAR ───────────────────────── */}
             <div
                 style={{
                     display: 'flex',
                     gap: 12,
-                    marginBottom: 24,
+                    marginBottom: 16,
                     flexWrap: 'wrap',
                     alignItems: 'center',
                 }}
@@ -120,45 +160,64 @@ export default function TicketList() {
                     )}
                 </div>
 
-                {/* MY TICKETS */}
-                <button
-                    onClick={() => {
-                        setMyTickets((m) => !m);
-                        setPage(0);
-                    }}
-                    className={`btn ${myTickets ? 'btn-primary' : 'btn-ghost'}`}
-                >
-                    My Tickets
-                </button>
+                {/* MY TICKETS (only for ADMIN/TECHNICIAN) */}
+                {!isUser && (
+                    <button
+                        onClick={() => {
+                            setMyTickets((m) => !m);
+                            setPage(0);
+                        }}
+                        className={`btn ${myTickets ? 'btn-primary' : 'btn-ghost'}`}
+                    >
+                        My Tickets
+                    </button>
+                )}
 
-                {/* FILTER BUTTON */}
-                <button
-                    onClick={() => setShowFilters((f) => !f)}
-                    className="btn btn-ghost"
-                >
-                    <SlidersHorizontal size={15} /> Filters
-                </button>
+                {/* NEW TICKET (USER and ADMIN) */}
+                {(isUser || isAdmin) && (
+                    <Link to="/tickets/new" className="btn btn-primary">
+                        + New Ticket
+                    </Link>
+                )}
             </div>
 
+            {/* ─── STATUS FILTER TABS ─────────────── */}
+            <StatusFilterTabs
+                active={statusFilter}
+                onChange={(s) => { setStatusFilter(s); setPage(0); }}
+                counts={statusCounts}
+            />
+
             {/* ─── RESULT INFO ───────────────────── */}
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ marginBottom: 20, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
                 {search
                     ? `${filtered.length} results for "${search}"`
-                    : `Showing ${data.content.length} of ${data.totalElements}`}
+                    : statusFilter !== 'ALL'
+                        ? `${filtered.length} ${statusFilter.toLowerCase().replace('_', ' ')} tickets`
+                        : `Showing ${data.content.length} of ${data.totalElements}`}
             </div>
 
             {/* ─── GRID ─────────────────────────── */}
             {loading ? (
-                <div style={{ textAlign: 'center', padding: 80 }}>
-                    Loading...
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
+                    <div className="spinner" style={{ width: 30, height: 30 }} />
                 </div>
             ) : filtered.length === 0 ? (
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="ticket-list-empty"
+                    className="card"
+                    style={{ textAlign: 'center', padding: 60 }}
                 >
-                    No tickets found
+                    <ClipboardList size={40} style={{ color: 'var(--text-muted)', marginBottom: 12 }} />
+                    <p style={{ color: 'var(--text-muted)', marginBottom: 16 }}>
+                        {isUser ? 'You haven\'t reported any incidents yet' : 'No tickets found'}
+                    </p>
+                    {(isUser || isAdmin) && (
+                        <Link to="/tickets/new" className="btn btn-primary btn-sm">
+                            + Report an Incident
+                        </Link>
+                    )}
                 </motion.div>
             ) : (
                 <div className="grid-auto">
@@ -176,16 +235,21 @@ export default function TicketList() {
 
             {/* ─── PAGINATION ───────────────────── */}
             {data.totalPages > 1 && (
-                <div style={{ display: 'flex', gap: 8, marginTop: 40 }}>
+                <div style={{ display: 'flex', gap: 8, marginTop: 40, justifyContent: 'center' }}>
                     <button
                         onClick={() => setPage((p) => Math.max(p - 1, 0))}
                         disabled={page === 0}
+                        className="btn btn-ghost btn-sm"
                     >
                         ← Prev
                     </button>
 
                     {Array.from({ length: data.totalPages }, (_, i) => (
-                        <button key={i} onClick={() => setPage(i)}>
+                        <button
+                            key={i}
+                            onClick={() => setPage(i)}
+                            className={`btn btn-sm ${i === page ? 'btn-primary' : 'btn-ghost'}`}
+                        >
                             {i + 1}
                         </button>
                     ))}
@@ -197,6 +261,7 @@ export default function TicketList() {
                             )
                         }
                         disabled={page >= data.totalPages - 1}
+                        className="btn btn-ghost btn-sm"
                     >
                         Next →
                     </button>

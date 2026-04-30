@@ -9,17 +9,27 @@ const api = axios.create({
     },
 });
 
-// Attach user email header
+// Attach JWT token from localStorage
 api.interceptors.request.use((config) => {
-    const user = localStorage.getItem("userEmail") || "user1@test.com";
-    config.headers["X-User-Email"] = user;
+    const token = localStorage.getItem("token");
+    if (token) {
+        config.headers["Authorization"] = `Bearer ${token}`;
+    }
     return config;
 });
 
-// Handle errors cleanly
+// Handle errors — redirect to login on 401
 api.interceptors.response.use(
     (res) => res,
     (err) => {
+        if (err.response?.status === 401) {
+            // Don't redirect if already on login/register page
+            if (!window.location.pathname.startsWith('/login')
+                && !window.location.pathname.startsWith('/oauth2')) {
+                localStorage.removeItem("token");
+                window.location.href = "/login";
+            }
+        }
         const message = err.response?.data?.message || "Something went wrong";
         return Promise.reject({
             message,
@@ -29,6 +39,72 @@ api.interceptors.response.use(
 );
 
 const unwrap = (res) => res.data?.data;
+
+// ─── Auth APIs ──────────────────────────────
+export const authApi = {
+    login: (email, password) =>
+        api.post("/auth/login", { email, password }).then(unwrap),
+
+    register: (email, name, password) =>
+        api.post("/auth/register", { email, name, password }).then(unwrap),
+
+    getMe: () =>
+        api.get("/auth/me").then(unwrap),
+};
+
+// ─── User APIs ──────────────────────────────
+export const userApi = {
+    getAll: () =>
+        api.get("/users").then(unwrap),
+
+    getTechnicians: () =>
+        api.get("/users/technicians").then(unwrap),
+
+    updateRole: (userId, role) =>
+        api.put(`/users/${userId}/role`, { role }).then(unwrap),
+};
+
+// ─── Resource APIs ──────────────────────────
+export const resourceApi = {
+    getAll: (params = {}) =>
+        api.get("/resources", { params }).then(unwrap),
+
+    getById: (id) =>
+        api.get(`/resources/${id}`).then(unwrap),
+
+    create: (data) =>
+        api.post("/resources", data).then(unwrap),
+
+    update: (id, data) =>
+        api.put(`/resources/${id}`, data).then(unwrap),
+
+    delete: (id) =>
+        api.delete(`/resources/${id}`),
+};
+
+// ─── Booking APIs ────────────────────────
+export const bookingApi = {
+    getAll: (params = {}) =>
+        api.get("/bookings", { params }).then(unwrap),
+
+    getById: (id) =>
+        api.get(`/bookings/${id}`).then(unwrap),
+
+    create: (data) =>
+        api.post("/bookings", data).then(unwrap),
+
+    approve: (id) =>
+        api.put(`/bookings/${id}/approve`).then(unwrap),
+
+    reject: (id, reason) =>
+        api.put(`/bookings/${id}/reject`, { reason }).then(unwrap),
+
+    cancel: (id) =>
+        api.put(`/bookings/${id}/cancel`).then(unwrap),
+
+    stats: () =>
+        api.get("/bookings/stats").then(unwrap),
+};
 
 // ─── Ticket APIs ─────────────────────────
 export const ticketApi = {
@@ -41,7 +117,6 @@ export const ticketApi = {
     getOverdue: () =>
         api.get("/tickets/overdue").then(unwrap),
 
-    // Backend currently exposes activity directly; history is read from ticket detail payload.
     getHistory: (id) =>
         api.get(`/tickets/${id}`).then((res) => res.data?.data?.statusHistory || []),
 
@@ -63,6 +138,9 @@ export const ticketApi = {
 
     delete: (id) =>
         api.delete(`/tickets/${id}`),
+
+    checkDuplicates: (resourceId) =>
+        api.get(`/tickets/duplicate-check?resourceId=${resourceId}`).then(unwrap),
 };
 
 export const attachmentApi = {
@@ -123,6 +201,24 @@ export const analyticsApi = {
 
     suggestTechnician: () =>
         api.get("/analytics/technicians/suggest").then(unwrap),
+};
+
+// ─── Notification APIs ──────────────────
+export const notificationApi = {
+    getAll: (params = {}) =>
+        api.get("/notifications", { params }).then(unwrap),
+
+    getUnreadCount: () =>
+        api.get("/notifications/unread-count").then(unwrap),
+
+    markAsRead: (id) =>
+        api.put(`/notifications/${id}/read`).then(unwrap),
+
+    markAllAsRead: () =>
+        api.put("/notifications/read-all").then(unwrap),
+
+    delete: (id) =>
+        api.delete(`/notifications/${id}`).then(unwrap),
 };
 
 export default api;

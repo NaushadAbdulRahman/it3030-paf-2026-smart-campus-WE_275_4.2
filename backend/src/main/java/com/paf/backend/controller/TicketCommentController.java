@@ -3,6 +3,7 @@ package com.paf.backend.controller;
 import com.paf.backend.dto.request.CommentRequest;
 import com.paf.backend.dto.response.ApiResponse;
 import com.paf.backend.dto.response.CommentResponse;
+import com.paf.backend.security.SecurityHelper;
 import com.paf.backend.service.TicketCommentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -15,59 +16,48 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/tickets/{ticketId}/comments")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
 public class TicketCommentController {
 
     private final TicketCommentService commentService;
-
-    // ─── Add Comment ─────────────────────────────────────────
+    private final SecurityHelper securityHelper;
 
     @PostMapping
     public ResponseEntity<ApiResponse<CommentResponse>> addComment(
             @PathVariable Long ticketId,
-            @Valid @RequestBody CommentRequest request,
-            @RequestHeader(value = "X-User-Email", defaultValue = "user@campus.lk") String userEmail) {
+            @Valid @RequestBody CommentRequest request) {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Comment added",
-                        commentService.addComment(ticketId, request, userEmail)));
+                        commentService.addComment(ticketId, request, securityHelper.getCurrentEmail())));
     }
-
-    // ─── Get Comments ────────────────────────────────────────
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<CommentResponse>>> getComments(
-            @PathVariable Long ticketId,
-            @RequestHeader(value = "X-User-Email", defaultValue = "user@campus.lk") String userEmail) {
+            @PathVariable Long ticketId) {
 
         return ResponseEntity.ok(
                 ApiResponse.success(
-                        commentService.getComments(ticketId, userEmail)));
+                        commentService.getComments(ticketId, securityHelper.getCurrentEmail())));
     }
-
-    // ─── Update Comment ──────────────────────────────────────
 
     @PutMapping("/{commentId}")
     public ResponseEntity<ApiResponse<CommentResponse>> updateComment(
             @PathVariable Long ticketId,
             @PathVariable Long commentId,
-            @Valid @RequestBody CommentRequest request,
-            @RequestHeader(value = "X-User-Email", defaultValue = "user@campus.lk") String userEmail) {
+            @Valid @RequestBody CommentRequest request) {
 
         return ResponseEntity.ok(
                 ApiResponse.success("Comment updated",
-                        commentService.updateComment(ticketId, commentId, request, userEmail)));
+                        commentService.updateComment(ticketId, commentId, request, securityHelper.getCurrentEmail())));
     }
-
-    // ─── Delete Comment ──────────────────────────────────────
 
     @DeleteMapping("/{commentId}")
     public ResponseEntity<Void> deleteComment(
             @PathVariable Long ticketId,
-            @PathVariable Long commentId,
-            @RequestHeader(value = "X-User-Email", defaultValue = "user@campus.lk") String userEmail) {
+            @PathVariable Long commentId) {
 
-        commentService.deleteComment(ticketId, commentId, userEmail);
+        commentService.deleteComment(ticketId, commentId, securityHelper.getCurrentEmail());
         return ResponseEntity.noContent().build();
     }
 }

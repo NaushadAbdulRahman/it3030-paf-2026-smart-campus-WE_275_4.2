@@ -1,22 +1,41 @@
 package com.paf.backend.config;
 
+import com.paf.backend.security.JwtAuthenticationFilter;
+import com.paf.backend.security.OAuth2LoginSuccessHandler;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.http.HttpMethod;
 
 import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
+
+    @Value("${app.frontend.url:http://localhost:3001}")
+    private String frontendUrl;
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -26,9 +45,23 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // Public endpoints
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .anyRequest().permitAll()
-                );
+                        .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/resources", "/api/resources/**").permitAll()
+                        .requestMatchers("/files/**").permitAll()
+                        // Everything else requires authentication
+                        .anyRequest().authenticated()
+                )
+                // Google OAuth2 login
+                .oauth2Login(oauth2 -> oauth2
+                        .successHandler(oAuth2LoginSuccessHandler)
+                )
+                // Add JWT filter before UsernamePasswordAuth
+                .addFilterBefore(jwtAuthenticationFilter,
+                        UsernamePasswordAuthenticationFilter.class);
+
         return http.build();
     }
 
@@ -36,14 +69,16 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(
+                normalizeOrigin(frontendUrl),
                 "http://localhost:3000",
+                "http://localhost:3001",
                 "http://localhost:5173"
         ));
         config.setAllowedMethods(List.of(
                 "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
         ));
         config.setAllowedHeaders(List.of(
-                "Authorization", "Content-Type", "X-User-Email",
+                "Authorization", "Content-Type",
                 "Accept", "Origin",
                 "Access-Control-Request-Method",
                 "Access-Control-Request-Headers"
@@ -55,5 +90,12 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
+    }
+
+    private String normalizeOrigin(String origin) {
+        if (origin == null || origin.isBlank()) {
+            return "http://localhost:3001";
+        }
+        return origin.endsWith("/") ? origin.substring(0, origin.length() - 1) : origin;
     }
 }

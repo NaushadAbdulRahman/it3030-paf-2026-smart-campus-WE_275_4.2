@@ -4,6 +4,9 @@ import com.paf.backend.dto.request.AssignRequest;
 import com.paf.backend.dto.request.StatusUpdateRequest;
 import com.paf.backend.dto.request.TicketRequest;
 import com.paf.backend.dto.response.*;
+import com.paf.backend.enums.Role;
+import com.paf.backend.model.User;
+import com.paf.backend.security.SecurityHelper;
 import com.paf.backend.service.TicketService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -16,130 +19,144 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/tickets")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = { "http://localhost:3000", "http://localhost:5173" })
 public class TicketController {
 
-    private final TicketService ticketService;
+        private final TicketService ticketService;
+        private final SecurityHelper securityHelper;
 
-    // ─── CREATE ─────────────────────────────────────────────
+        // ─── CREATE ─────────────────────────────────────────────
 
-    @PostMapping
-    public ResponseEntity<ApiResponse<TicketResponse>> createTicket(
-            @Valid @RequestBody TicketRequest request,
-            @RequestHeader(value = "X-User-Email", defaultValue = "user@campus.lk") String userEmail) {
+        @PostMapping
+        public ResponseEntity<ApiResponse<TicketResponse>> createTicket(
+                        @Valid @RequestBody TicketRequest request) {
 
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Ticket created successfully",
-                        ticketService.createTicket(request, userEmail)));
-    }
+                String userEmail = securityHelper.getCurrentEmail();
 
-    // ─── GET ALL ────────────────────────────────────────────
+                return ResponseEntity.status(HttpStatus.CREATED)
+                                .body(ApiResponse.success("Ticket created successfully",
+                                                ticketService.createTicket(request, userEmail)));
+        }
 
-    @GetMapping
-    public ResponseEntity<ApiResponse<PagedResponse<TicketResponse>>> getTickets(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "createdAt") String sortBy,
-            @RequestParam(defaultValue = "false") boolean myTickets,
-            @RequestHeader(value = "X-User-Email", defaultValue = "user@campus.lk") String userEmail) {
+        // ─── GET ALL ────────────────────────────────────────────
 
-        PagedResponse<TicketResponse> tickets = myTickets
-                ? ticketService.getMyTickets(userEmail, page, size)
-                : ticketService.getAllTickets(page, size, sortBy);
+        @GetMapping
+        public ResponseEntity<ApiResponse<PagedResponse<TicketResponse>>> getTickets(
+                        @RequestParam(defaultValue = "0") int page,
+                        @RequestParam(defaultValue = "10") int size,
+                        @RequestParam(defaultValue = "createdAt") String sortBy,
+                        @RequestParam(defaultValue = "false") boolean myTickets) {
 
-        return ResponseEntity.ok(ApiResponse.success(tickets));
-    }
+                User currentUser = securityHelper.getCurrentUser();
+                String userEmail = currentUser != null ? currentUser.getEmail() : "anonymous";
+                Role role = currentUser != null ? currentUser.getRole() : Role.USER;
 
-    // ─── OVERDUE ────────────────────────────────────────────
+                PagedResponse<TicketResponse> tickets;
 
-    @GetMapping("/overdue")
-    public ResponseEntity<ApiResponse<List<TicketResponse>>> getOverdueTickets() {
-        return ResponseEntity.ok(
-                ApiResponse.success("Overdue tickets",
-                        ticketService.getOverdueTickets()));
-    }
+                if (role == Role.USER || myTickets) {
+                        tickets = ticketService.getMyTickets(userEmail, page, size);
+                } else {
+                        tickets = ticketService.getAllTickets(page, size, sortBy);
+                }
 
-    // ─── DUPLICATE CHECK ────────────────────────────────────
+                return ResponseEntity.ok(ApiResponse.success(tickets));
+        }
 
-    @GetMapping("/duplicate-check")
-    public ResponseEntity<ApiResponse<List<TicketResponse>>> checkDuplicates(
-            @RequestParam String resourceId) {
+        // ─── OVERDUE ────────────────────────────────────────────
 
-        return ResponseEntity.ok(
-                ApiResponse.success("Duplicate check results",
-                        ticketService.checkDuplicates(resourceId)));
-    }
+        @GetMapping("/overdue")
+        public ResponseEntity<ApiResponse<List<TicketResponse>>> getOverdueTickets() {
+                return ResponseEntity.ok(
+                                ApiResponse.success("Overdue tickets",
+                                                ticketService.getOverdueTickets()));
+        }
 
-    // ─── GET ONE ────────────────────────────────────────────
+        // ─── DUPLICATE CHECK ────────────────────────────────────
 
-    @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<TicketResponse>> getTicket(
-            @PathVariable Long id,
-            @RequestHeader(value = "X-User-Email", defaultValue = "user@campus.lk") String userEmail) {
+        @GetMapping("/duplicate-check")
+        public ResponseEntity<ApiResponse<List<TicketResponse>>> checkDuplicates(
+                        @RequestParam String resourceId) {
 
-        return ResponseEntity.ok(
-                ApiResponse.success(
-                        ticketService.getTicketById(id, userEmail)));
-    }
+                return ResponseEntity.ok(
+                                ApiResponse.success("Duplicate check results",
+                                                ticketService.checkDuplicates(resourceId)));
+        }
 
-    // ─── UPDATE ─────────────────────────────────────────────
+        // ─── GET ONE ────────────────────────────────────────────
 
-    @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse<TicketResponse>> updateTicket(
-            @PathVariable Long id,
-            @Valid @RequestBody TicketRequest request,
-            @RequestHeader(value = "X-User-Email", defaultValue = "user@campus.lk") String userEmail) {
+        @GetMapping("/{id}")
+        public ResponseEntity<ApiResponse<TicketResponse>> getTicket(
+                        @PathVariable Long id) {
 
-        return ResponseEntity.ok(
-                ApiResponse.success("Ticket updated",
-                        ticketService.updateTicket(id, request, userEmail)));
-    }
+                String userEmail = securityHelper.getCurrentEmail();
 
-    // ─── UPDATE STATUS ──────────────────────────────────────
+                return ResponseEntity.ok(
+                                ApiResponse.success(
+                                                ticketService.getTicketById(id, userEmail)));
+        }
 
-    @PutMapping("/{id}/status")
-    public ResponseEntity<ApiResponse<TicketResponse>> updateStatus(
-            @PathVariable Long id,
-            @Valid @RequestBody StatusUpdateRequest request,
-            @RequestHeader(value = "X-User-Email", defaultValue = "user@campus.lk") String userEmail) {
+        // ─── UPDATE ─────────────────────────────────────────────
 
-        return ResponseEntity.ok(
-                ApiResponse.success("Status updated",
-                        ticketService.updateStatus(id, request, userEmail)));
-    }
+        @PutMapping("/{id}")
+        public ResponseEntity<ApiResponse<TicketResponse>> updateTicket(
+                        @PathVariable Long id,
+                        @Valid @RequestBody TicketRequest request) {
 
-    // ─── ASSIGN ─────────────────────────────────────────────
+                String userEmail = securityHelper.getCurrentEmail();
 
-    @PutMapping("/{id}/assign")
-    public ResponseEntity<ApiResponse<TicketResponse>> assignTechnician(
-            @PathVariable Long id,
-            @Valid @RequestBody AssignRequest request,
-            @RequestHeader(value = "X-User-Email", defaultValue = "user@campus.lk") String userEmail) {
+                return ResponseEntity.ok(
+                                ApiResponse.success("Ticket updated",
+                                                ticketService.updateTicket(id, request, userEmail)));
+        }
 
-        return ResponseEntity.ok(
-                ApiResponse.success("Technician assigned",
-                        ticketService.assignTechnician(id, request, userEmail)));
-    }
+        // ─── UPDATE STATUS ──────────────────────────────────────
 
-    // ─── DELETE ─────────────────────────────────────────────
+        @PutMapping("/{id}/status")
+        public ResponseEntity<ApiResponse<TicketResponse>> updateStatus(
+                        @PathVariable Long id,
+                        @Valid @RequestBody StatusUpdateRequest request) {
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteTicket(
-            @PathVariable Long id,
-            @RequestHeader(value = "X-User-Email", defaultValue = "user@campus.lk") String userEmail) {
+                User currentUser = securityHelper.getCurrentUser();
+                ticketService.validateStatusUpdatePermission(id, currentUser);
 
-        ticketService.deleteTicket(id, userEmail);
-        return ResponseEntity.noContent().build();
-    }
+                return ResponseEntity.ok(
+                                ApiResponse.success("Status updated",
+                                                ticketService.updateStatus(id, request, currentUser.getEmail())));
+        }
 
-    // ─── ACTIVITY FEED ──────────────────────────────────────
+        // ─── ASSIGN ─────────────────────────────────────────────
 
-    @GetMapping("/{id}/activity")
-    public ResponseEntity<ApiResponse<List<ActivityResponse>>> getActivity(
-            @PathVariable Long id) {
+        @PutMapping("/{id}/assign")
+        public ResponseEntity<ApiResponse<TicketResponse>> assignTechnician(
+                        @PathVariable Long id,
+                        @Valid @RequestBody AssignRequest request) {
 
-        return ResponseEntity.ok(
-                ApiResponse.success("Activity feed",
-                        ticketService.getActivityFeed(id)));
-    }
+                User currentUser = securityHelper.getCurrentUser();
+                ticketService.validateAssignPermission(currentUser);
+
+                return ResponseEntity.ok(
+                                ApiResponse.success("Technician assigned",
+                                                ticketService.assignTechnician(id, request, currentUser.getEmail())));
+        }
+
+        // ─── DELETE ─────────────────────────────────────────────
+
+        @DeleteMapping("/{id}")
+        public ResponseEntity<Void> deleteTicket(@PathVariable Long id) {
+
+                User currentUser = securityHelper.getCurrentUser();
+                ticketService.deleteTicket(id, currentUser.getEmail(), currentUser.getRole());
+                return ResponseEntity.noContent().build();
+        }
+
+        // ─── ACTIVITY FEED ──────────────────────────────────────
+
+        @GetMapping("/{id}/activity")
+        public ResponseEntity<ApiResponse<List<ActivityResponse>>> getActivity(
+                        @PathVariable Long id) {
+
+                return ResponseEntity.ok(
+                                ApiResponse.success("Activity feed",
+                                                ticketService.getActivityFeed(id)));
+        }
 }

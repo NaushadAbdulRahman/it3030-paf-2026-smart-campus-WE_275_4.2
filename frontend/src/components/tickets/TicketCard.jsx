@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -7,7 +7,10 @@ import {
     User,
     Paperclip,
     MessageSquare,
-    ChevronRight
+    ChevronRight,
+    Play,
+    CheckCircle2,
+    Lock
 } from 'lucide-react';
 
 import {
@@ -20,10 +23,48 @@ import {
     getSlaRemaining,
     shortId
 } from '../../utils/helpers';
+import { ticketApi } from '../../services/api';
+import toast from 'react-hot-toast';
 
-export default function TicketCard({ ticket, index = 0 }) {
+const TECHNICIAN_NEXT_STATUS = {
+    OPEN:        { status: 'IN_PROGRESS', label: 'Start',   Icon: Play },
+    IN_PROGRESS: { status: 'RESOLVED',    label: 'Resolve', Icon: CheckCircle2 },
+    RESOLVED:    { status: 'CLOSED',      label: 'Close',   Icon: Lock },
+};
+
+export default function TicketCard({
+    ticket,
+    index = 0,
+    inlineActions = false,
+    currentUserEmail = null,
+    onStatusChanged = null,
+}) {
     const sla = getSlaRemaining(ticket?.slaDeadline);
     const icon = CATEGORY_ICONS[ticket?.category] || '📋';
+    const [updating, setUpdating] = useState(false);
+
+    const isAssignedToMe =
+        inlineActions &&
+        currentUserEmail &&
+        ticket?.assignedTo &&
+        ticket.assignedTo === currentUserEmail;
+    const nextAction = isAssignedToMe ? TECHNICIAN_NEXT_STATUS[ticket?.status] : null;
+
+    const handleAction = async (e, status) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (updating) return;
+        setUpdating(true);
+        try {
+            await ticketApi.updateStatus(ticket.id, { status });
+            toast.success(`Marked ${STATUS_LABELS[status] || status}`);
+            onStatusChanged?.(ticket.id, status);
+        } catch (err) {
+            toast.error(err?.message || 'Status update failed');
+        } finally {
+            setUpdating(false);
+        }
+    };
 
     return (
         <motion.div
@@ -253,6 +294,33 @@ export default function TicketCard({ ticket, index = 0 }) {
                             )}
                         </div>
                     </div>
+
+                    {/* Inline tech actions — only visible to assigned technician */}
+                    {isAssignedToMe && nextAction && (() => {
+                        const ActionIcon = nextAction.Icon;
+                        return (
+                            <div
+                                style={{
+                                    marginTop: 12,
+                                    paddingTop: 12,
+                                    borderTop: '1px solid var(--border-subtle)',
+                                    display: 'flex',
+                                    gap: 8,
+                                }}
+                            >
+                                <button
+                                    type="button"
+                                    disabled={updating}
+                                    onClick={(e) => handleAction(e, nextAction.status)}
+                                    className="btn btn-primary btn-sm"
+                                    style={{ flex: 1, justifyContent: 'center', gap: 6 }}
+                                >
+                                    <ActionIcon size={13} />
+                                    {updating ? 'Updating…' : nextAction.label}
+                                </button>
+                            </div>
+                        );
+                    })()}
                 </div>
             </Link>
         </motion.div>

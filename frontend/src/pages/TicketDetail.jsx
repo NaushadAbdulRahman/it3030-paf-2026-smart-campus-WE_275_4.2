@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, MapPin, User, Calendar, Edit3, Trash2, UserCheck } from 'lucide-react';
+import { ArrowLeft, MapPin, User, Calendar, Trash2, UserCheck, Lock } from 'lucide-react';
 import './TicketDetail.css';
 import Layout from '../components/layout/Layout';
 import SlaTimer from '../components/tickets/SlaTimer';
@@ -10,8 +10,9 @@ import ActivityFeed from '../components/tickets/ActivityFeed';
 import CommentSection from '../components/comments/CommentSection';
 import AttachmentDropzone from '../components/attachments/AttachmentDropzone';
 import ImageLightbox from '../components/tickets/ImageLightbox';
-import { ticketApi, attachmentApi, analyticsApi } from '../services/api';
+import { ticketApi, attachmentApi, userApi } from '../services/api';
 import { STATUS_CLASS, STATUS_LABELS, PRIORITY_CLASS, PRIORITY_LABELS, CATEGORY_ICONS, formatDate, shortId } from '../utils/helpers';
+import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
 const TABS = [
@@ -32,6 +33,8 @@ const VALID_TRANSITIONS = {
 export default function TicketDetail() {
     const { id }      = useParams();
     const navigate    = useNavigate();
+    const { user: currentUser, isAdmin, isTechnician } = useAuth();
+
     const [ticket, setTicket]       = useState(null);
     const [history, setHistory]     = useState([]);
     const [activity, setActivity]   = useState([]);
@@ -45,52 +48,82 @@ export default function TicketDetail() {
     const [pendingStatus, setPendingStatus]     = useState(null);
     const [showAssignModal, setShowAssignModal] = useState(false);
     const [assignTech, setAssignTech] = useState('');
-    // validation added
     const [statusErrors, setStatusErrors] = useState({});
-    // validation added
     const [assignErrors, setAssignErrors] = useState({});
-
     const [actionLoading, setActionLoading] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const [t, h, act, workload] = await Promise.all([
+            const promises = [
                 ticketApi.getById(id),
                 ticketApi.getHistory(id),
                 ticketApi.getActivity(id),
-                analyticsApi.workload(),
-            ]);
+            ];
+
+            // Only fetch technician list for admin
+            if (isAdmin) {
+                promises.push(userApi.getTechnicians().catch(() => []));
+            } else {
+                promises.push(Promise.resolve([]));
+            }
+
+            const [t, h, act, techs] = await Promise.all(promises);
             setTicket(t);
             setAttachments(t.attachments || []);
             setHistory(h || []);
             setActivity(act || []);
-            setTechnicians((workload || []).map(w => w.technicianId));
+            setTechnicians(techs || []);
         } catch { toast.error('Failed to load ticket'); }
         finally { setLoading(false); }
-    }, [id]);
+    }, [id, isAdmin]);
 
     useEffect(() => { void load(); }, [load]);
 
-    // validation added
+    // ─── PERMISSIONS ─────────────────────────────
+    const isOwner = ticket && currentUser?.email === ticket.createdBy;
+    const isAssignedTech = ticket && isTechnician && currentUser?.email === ticket.assignedTo;
+
+    // Can update status: ADMIN always, TECHNICIAN only if assigned
+    const canUpdateStatus = isAdmin || isAssignedTech;
+
+    // Can assign: ADMIN only
+    const canAssign = isAdmin;
+
+    // Can delete: ADMIN always, owner if USER
+    const canDelete = isAdmin || isOwner;
+
+    // Get allowed transitions based on role
+    const getAllowedTransitions = () => {
+        if (!ticket) return [];
+        const allTransitions = VALID_TRANSITIONS[ticket.status] || [];
+
+        if (isAdmin) return allTransitions;
+
+        if (isAssignedTech) {
+            // Technician can only move forward, not reject
+            return allTransitions.filter(s => s !== 'REJECTED');
+        }
+
+        return [];
+    };
+
+    const transitions = getAllowedTransitions();
+
+    // ─── VALIDATION ─────────────────────────────
     const validateStatus = () => {
         const next = {};
-
         if (pendingStatus === 'REJECTED' && !statusNote.trim()) {
             next.statusNote = 'Rejection reason required';
         }
-
         return next;
     };
 
-    // validation added
     const validateAssign = () => {
         const next = {};
-
         if (!assignTech.trim()) {
-            next.assignTech = 'Enter technician';
+            next.assignTech = 'Select a technician';
         }
-
         return next;
     };
 
@@ -103,7 +136,6 @@ export default function TicketDetail() {
 
     const confirmStatus = async () => {
         if (!pendingStatus) return;
-        // validation added
         const validation = validateStatus();
         setStatusErrors(validation);
         if (Object.keys(validation).length > 0) return;
@@ -116,17 +148,13 @@ export default function TicketDetail() {
             setShowStatusModal(false);
             toast.success(`Status updated to ${STATUS_LABELS[pendingStatus]}`);
         } catch (e) { toast.error(e.message || 'Failed to update status'); }
-        finally {
-        setActionLoading(false);
-    }
+        finally { setActionLoading(false); }
     };
 
     const confirmAssign = async () => {
-        // validation added
         const validation = validateAssign();
         setAssignErrors(validation);
         if (Object.keys(validation).length > 0) return;
-
         setActionLoading(true);
         try {
             const updated = await ticketApi.assign(id, assignTech.trim());
@@ -148,9 +176,7 @@ export default function TicketDetail() {
             toast.success('Ticket deleted');
             navigate('/tickets');
         } catch (e) { toast.error(e.message); }
-        finally {
-            setActionLoading(false);
-        }
+        finally { setActionLoading(false); }
     };
 
     if (loading) return (
@@ -168,34 +194,55 @@ export default function TicketDetail() {
         </Layout>
     );
 
-    const transitions = VALID_TRANSITIONS[ticket.status] || [];
-    const tabCounts   = { attachments: attachments.length, comments: ticket.commentCount || 0, activity: activity.length, timeline: history.length };
+    const tabCounts = { attachments: attachments.length, comments: ticket.commentCount || 0, activity: activity.length, timeline: history.length };
 
     return (
         <Layout title={`Ticket #${shortId(ticket.id)}`} subtitle={ticket.title}>
             {/* Back + actions */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
                 <button onClick={() => navigate(-1)} className="btn btn-ghost btn-sm"><ArrowLeft size={14} /> Back</button>
-                <div style={{ display: 'flex', gap: 8 }}>
-                    {transitions.length > 0 && transitions.map(s => (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {/* Status transitions — only for authorized roles */}
+                    {canUpdateStatus && transitions.length > 0 && transitions.map(s => (
                         <button
                             key={s}
                             onClick={() => handleStatusChange(s)}
                             disabled={actionLoading}
                             className="btn btn-ghost btn-sm"
-                                style={{ borderColor: s === 'REJECTED' ? 'rgba(255,87,87,0.3)' : 'var(--border-amber)', color: s === 'REJECTED' ? '#ff5757' : 'var(--accent-amber)' }}>
+                            style={{ borderColor: s === 'REJECTED' ? 'rgba(255,87,87,0.3)' : 'var(--border-amber)', color: s === 'REJECTED' ? '#ff5757' : 'var(--accent-amber)' }}>
                             → {STATUS_LABELS[s]}
                         </button>
                     ))}
-                    <button
-                        onClick={() => setShowAssignModal(true)}
-                        disabled={actionLoading}
-                        className="btn btn-ghost btn-sm"><UserCheck size={14} /> Assign</button>
-                    <button
-                        onClick={handleDelete}
-                        disabled={actionLoading}
-                        className="btn btn-danger btn-sm"
-                    ><Trash2 size={14} /></button>
+
+                    {/* Assign button — ADMIN only */}
+                    {canAssign && (
+                        <button
+                            onClick={() => { setAssignTech(''); setAssignErrors({}); setShowAssignModal(true); }}
+                            disabled={actionLoading}
+                            className="btn btn-ghost btn-sm"><UserCheck size={14} /> Assign</button>
+                    )}
+
+                    {/* Delete — owner or ADMIN */}
+                    {canDelete && (
+                        <button
+                            onClick={handleDelete}
+                            disabled={actionLoading}
+                            className="btn btn-danger btn-sm"
+                        ><Trash2 size={14} /></button>
+                    )}
+
+                    {/* Show lock icon for users without permissions */}
+                    {!canUpdateStatus && !canDelete && (
+                        <div style={{
+                            display: 'flex', alignItems: 'center', gap: 6,
+                            padding: '6px 12px', borderRadius: 'var(--radius-md)',
+                            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+                            color: 'var(--text-muted)', fontSize: '0.75rem',
+                            fontFamily: 'var(--font-mono)',
+                        }}>
+                            <Lock size={12} /> View Only
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -341,7 +388,6 @@ export default function TicketDetail() {
                                         setStatusErrors(prev => ({ ...prev, statusNote: '' }));
                                     }
                                 }} className="form-textarea" style={{ minHeight: 90 }} placeholder={pendingStatus === 'REJECTED' ? 'Explain why this ticket is being rejected…' : 'Add a note about this status change…'} />
-                                {/* validation added */}
                                 {statusErrors.statusNote && <span style={{ color:'#ff5757', fontSize:'0.75rem' }}>{statusErrors.statusNote}</span>}
                             </div>
                             <div style={{ display: 'flex', gap: 10 }}>
@@ -363,28 +409,79 @@ export default function TicketDetail() {
                         <motion.div className="modal-box" initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95 }} onClick={e => e.stopPropagation()}>
                             <h3 style={{ marginBottom: 20 }}>Assign Technician</h3>
                             <div className="form-group" style={{ marginBottom: 20 }}>
-                                <label className="form-label">Technician Email / ID</label>
-                                <input value={assignTech} onChange={e => {
-                                    setAssignTech(e.target.value);
-                                    if (assignErrors.assignTech) {
-                                        setAssignErrors(prev => ({ ...prev, assignTech: '' }));
-                                    }
-                                }} placeholder="technician@campus.lk" className="form-input" />
-                                {/* validation added */}
-                                {assignErrors.assignTech && <span style={{ color:'#ff5757', fontSize:'0.75rem' }}>{assignErrors.assignTech}</span>}
-                                {technicians.length > 0 && (
-                                    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                        {technicians.slice(0, 5).map((t, idx) => (
-                                            <button key={`${String(t)}-${idx}`} type="button" onClick={() => setAssignTech(t)}
-                                                    style={{ padding: '7px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 7, color: 'var(--text-secondary)', cursor: 'pointer', textAlign: 'left', fontSize: '0.82rem', transition: 'all 0.15s ease' }}>
-                                                {t}
+                                <label className="form-label">Select Technician</label>
+
+                                {/* Technician list from API */}
+                                {technicians.length > 0 ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
+                                        {technicians.map((tech) => (
+                                            <button
+                                                key={tech.id}
+                                                type="button"
+                                                onClick={() => { setAssignTech(tech.email); setAssignErrors({}); }}
+                                                style={{
+                                                    padding: '10px 14px',
+                                                    background: assignTech === tech.email ? 'rgba(0,212,170,0.12)' : 'var(--bg-surface)',
+                                                    border: assignTech === tech.email ? '1px solid rgba(0,212,170,0.3)' : '1px solid var(--border-subtle)',
+                                                    borderRadius: 8,
+                                                    color: assignTech === tech.email ? '#00d4aa' : 'var(--text-secondary)',
+                                                    cursor: 'pointer',
+                                                    textAlign: 'left',
+                                                    fontSize: '0.85rem',
+                                                    transition: 'all 0.15s ease',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: 10,
+                                                    fontFamily: 'var(--font-body)',
+                                                }}
+                                            >
+                                                <div style={{
+                                                    width: 28, height: 28, borderRadius: '50%',
+                                                    background: 'var(--bg-elevated)',
+                                                    border: '1px solid var(--border-dim)',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    fontSize: '0.65rem', fontWeight: 700,
+                                                    fontFamily: 'var(--font-mono)',
+                                                }}>
+                                                    {tech.name?.charAt(0).toUpperCase() || '?'}
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontWeight: 500 }}>{tech.name}</div>
+                                                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{tech.email}</div>
+                                                </div>
+                                                {assignTech === tech.email && (
+                                                    <div style={{
+                                                        marginLeft: 'auto', width: 8, height: 8,
+                                                        borderRadius: '50%', background: '#00d4aa',
+                                                        boxShadow: '0 0 8px #00d4aa',
+                                                    }} />
+                                                )}
                                             </button>
                                         ))}
                                     </div>
+                                ) : (
+                                    <div style={{ marginBottom: 12 }}>
+                                        <input
+                                            value={assignTech}
+                                            onChange={e => {
+                                                setAssignTech(e.target.value);
+                                                if (assignErrors.assignTech) {
+                                                    setAssignErrors(prev => ({ ...prev, assignTech: '' }));
+                                                }
+                                            }}
+                                            placeholder="technician@campus.lk"
+                                            className="form-input"
+                                        />
+                                    </div>
                                 )}
+
+                                {assignErrors.assignTech && <span style={{ color:'#ff5757', fontSize:'0.75rem' }}>{assignErrors.assignTech}</span>}
                             </div>
                             <div style={{ display: 'flex', gap: 10 }}>
-                                <button onClick={confirmAssign} className="btn btn-primary" style={{ flex: 1 }}>Assign</button>
+                                <button
+                                    onClick={confirmAssign}
+                                    disabled={actionLoading || !assignTech.trim()}
+                                    className="btn btn-primary" style={{ flex: 1 }}>Assign</button>
                                 <button onClick={() => setShowAssignModal(false)} className="btn btn-ghost">Cancel</button>
                             </div>
                         </motion.div>

@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Sparkles, AlertCircle, ArrowLeft, Upload, X } from 'lucide-react';
 
 import Layout from '../components/layout/Layout';
-import { ticketApi } from '../services/api';
-import { suggestPriority, CATEGORY_ICONS } from '../utils/helpers';
+import { ticketApi, attachmentApi } from '../services/api';
+import { suggestPriority, CATEGORY_ICONS, formatFileSize } from '../utils/helpers';
 import toast from 'react-hot-toast';
+
+const MAX_FILES = 3;
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const CATEGORIES = ['ELECTRICAL','PLUMBING','IT','HVAC','FURNITURE','STRUCTURAL','OTHER'];
 const PRIORITIES = ['LOW','MEDIUM','HIGH','CRITICAL'];
@@ -35,6 +38,34 @@ export default function CreateTicket() {
     const [submitting, setSubmitting] = useState(false);
     const [suggestion, setSuggestion] = useState(null);
     const [duplicates, setDuplicates] = useState([]);
+    const [files, setFiles] = useState([]);
+    const fileInputRef = useRef(null);
+
+    const addFiles = (incoming) => {
+        const list = Array.from(incoming || []);
+        const space = MAX_FILES - files.length;
+        if (space <= 0) {
+            toast.error(`Maximum ${MAX_FILES} attachments allowed`);
+            return;
+        }
+        const accepted = [];
+        for (const f of list.slice(0, space)) {
+            if (!f.type.startsWith('image/')) {
+                toast.error(`${f.name}: only images allowed`);
+                continue;
+            }
+            if (f.size > MAX_FILE_SIZE) {
+                toast.error(`${f.name}: must be under 10MB`);
+                continue;
+            }
+            accepted.push(f);
+        }
+        if (accepted.length) setFiles(prev => [...prev, ...accepted]);
+    };
+
+    const removeFile = (idx) => {
+        setFiles(prev => prev.filter((_, i) => i !== idx));
+    };
 
     useEffect(() => {
         const desc = form.description.trim();
@@ -91,7 +122,25 @@ export default function CreateTicket() {
 
             if (!ticket?.id) throw new Error('Invalid response');
 
-            toast.success('Ticket created successfully!');
+            if (files.length > 0) {
+                let uploaded = 0;
+                for (const f of files) {
+                    try {
+                        await attachmentApi.upload(ticket.id, f);
+                        uploaded += 1;
+                    } catch (uploadErr) {
+                        toast.error(`${f.name}: ${uploadErr.message || 'upload failed'}`);
+                    }
+                }
+                if (uploaded > 0) {
+                    toast.success(`Ticket created with ${uploaded} attachment${uploaded > 1 ? 's' : ''}`);
+                } else {
+                    toast.success('Ticket created (attachments failed)');
+                }
+            } else {
+                toast.success('Ticket created successfully!');
+            }
+
             navigate(`/tickets/${ticket.id}`);
 
         } catch (err) {
@@ -186,11 +235,25 @@ export default function CreateTicket() {
                         </div>
                         {errors.priority && <span style={{ color:'#ff5757', fontSize:'0.75rem' }}>{errors.priority}</span>}
 
+                        {/* RESOURCE LINKING (Optional) */}
+                        <div className="form-group">
+                            <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Related Resource (Optional)</span>
+                            </label>
+                            <input
+                                value={form.resourceId}
+                                onChange={e => setField('resourceId', e.target.value)}
+                                placeholder="Enter Resource ID if applicable (e.g., '1')"
+                                className="form-input"
+                                disabled={submitting}
+                            />
+                        </div>
+
                         {/* LOCATION */}
                         <input
                             value={form.location}
                             onChange={e => setField('location', e.target.value)}
-                            placeholder="Location"
+                            placeholder="Location *"
                             className="form-input"
                             disabled={submitting}
                         />
@@ -205,6 +268,106 @@ export default function CreateTicket() {
                                 </button>
                             </div>
                         )}
+
+                        {/* ATTACHMENTS */}
+                        <div className="form-group">
+                            <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Attachments (Optional)</span>
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                                    {files.length}/{MAX_FILES} · images, max 10MB each
+                                </span>
+                            </label>
+
+                            {files.length < MAX_FILES && (
+                                <label
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={(e) => {
+                                        e.preventDefault();
+                                        addFiles(e.dataTransfer.files);
+                                    }}
+                                    style={{
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        padding: '20px',
+                                        borderRadius: 'var(--radius-lg)',
+                                        cursor: submitting ? 'not-allowed' : 'pointer',
+                                        border: '2px dashed var(--border-dim)',
+                                        background: 'var(--bg-surface)',
+                                        opacity: submitting ? 0.6 : 1,
+                                        gap: 6,
+                                    }}
+                                >
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        multiple
+                                        disabled={submitting}
+                                        onChange={(e) => {
+                                            addFiles(e.target.files);
+                                            if (fileInputRef.current) fileInputRef.current.value = '';
+                                        }}
+                                        style={{ display: 'none' }}
+                                    />
+                                    <Upload size={18} />
+                                    <span style={{ fontSize: '0.85rem' }}>Drop image(s) or click to choose</span>
+                                </label>
+                            )}
+
+                            {files.length > 0 && (
+                                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                    {files.map((f, i) => (
+                                        <div
+                                            key={`${f.name}-${i}`}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 10,
+                                                padding: '8px 10px',
+                                                background: 'var(--bg-surface)',
+                                                border: '1px solid var(--border-subtle)',
+                                                borderRadius: 8,
+                                            }}
+                                        >
+                                            <img
+                                                src={URL.createObjectURL(f)}
+                                                alt={f.name}
+                                                width={36}
+                                                height={36}
+                                                style={{ objectFit: 'cover', borderRadius: 6 }}
+                                            />
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{
+                                                    fontSize: '0.82rem',
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                    whiteSpace: 'nowrap',
+                                                }}>{f.name}</div>
+                                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                                    {formatFileSize(f.size)}
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => removeFile(i)}
+                                                disabled={submitting}
+                                                style={{
+                                                    background: 'transparent',
+                                                    border: 'none',
+                                                    color: 'var(--text-muted)',
+                                                    cursor: 'pointer',
+                                                    padding: 4,
+                                                }}
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
 
                         {/* SUBMIT */}
                         <button

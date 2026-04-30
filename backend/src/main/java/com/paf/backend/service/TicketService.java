@@ -5,6 +5,7 @@ import com.paf.backend.dto.request.StatusUpdateRequest;
 import com.paf.backend.dto.request.TicketRequest;
 import com.paf.backend.dto.response.*;
 import com.paf.backend.enums.ActivityType;
+import com.paf.backend.enums.Role;
 import com.paf.backend.enums.TicketStatus;
 import com.paf.backend.exception.CustomAccessDeniedException;
 import com.paf.backend.exception.InvalidStatusTransitionException;
@@ -13,8 +14,10 @@ import com.paf.backend.model.Ticket;
 import com.paf.backend.model.TicketAttachment;
 import com.paf.backend.model.TicketComment;
 import com.paf.backend.model.TicketStatusHistory;
+import com.paf.backend.model.NotificationType;
 import com.paf.backend.repository.TicketRepository;
 import com.paf.backend.repository.TicketStatusHistoryRepository;
+import com.paf.backend.repository.UserRepository;
 import com.paf.backend.util.SlaUtil;
 import com.paf.backend.util.TicketMapper;
 import lombok.RequiredArgsConstructor;
@@ -35,8 +38,10 @@ public class TicketService {
 
     private final TicketRepository ticketRepository;
     private final TicketStatusHistoryRepository statusHistoryRepository;
+    private final UserRepository userRepository;
     private final SlaUtil slaUtil;
     private final TicketMapper ticketMapper;
+    private final NotificationService notificationService;
 
     // ─── CREATE ─────────────────────────────────────────────
 
@@ -59,6 +64,15 @@ public class TicketService {
 
         saveHistory(saved, null, TicketStatus.OPEN, createdBy, "Ticket created");
 
+        // Notify Admins
+        notificationService.notifyAllAdmins(
+                NotificationType.TICKET_STATUS_CHANGED,
+                "New Ticket Reported",
+                "A new " + request.getCategory() + " incident was reported: " + request.getTitle(),
+                saved.getId(),
+                "TICKET"
+        );
+
         return ticketMapper.toSummaryResponse(saved);
     }
 
@@ -74,6 +88,12 @@ public class TicketService {
     public PagedResponse<TicketResponse> getMyTickets(String username, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         return buildPagedResponse(ticketRepository.findByCreatedBy(username, pageable));
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<TicketResponse> getAssignedTickets(String technicianEmail, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        return buildPagedResponse(ticketRepository.findByAssignedTo(technicianEmail, pageable));
     }
 
     @Transactional(readOnly = true)
@@ -154,9 +174,22 @@ public class TicketService {
         }
 
         ticket.setStatus(newStatus);
-        saveHistory(ticket, oldStatus, newStatus, currentUser, request.getNote());
+        Ticket saved = ticketRepository.save(ticket);
+        saveHistory(saved, oldStatus, newStatus, currentUser, request.getNote());
 
-        return ticketMapper.toSummaryResponse(ticketRepository.save(ticket));
+        // Notify reporter
+        userRepository.findByEmail(saved.getCreatedBy()).ifPresent(reporter -> {
+            notificationService.notifyUser(
+                    reporter.getId(),
+                    NotificationType.TICKET_STATUS_CHANGED,
+                    "Ticket Update: " + newStatus,
+                    "Your ticket '" + saved.getTitle() + "' is now " + newStatus.name(),
+                    saved.getId(),
+                    "TICKET"
+            );
+        });
+
+        return ticketMapper.toSummaryResponse(saved);
     }
 
     public TicketResponse assignTechnician(Long id, AssignRequest request, String currentUser) {
@@ -167,28 +200,77 @@ public class TicketService {
         // ONLY create history if status actually changes
         if (ticket.getStatus() == TicketStatus.OPEN) {
             TicketStatus oldStatus = ticket.getStatus();
-
             ticket.setStatus(TicketStatus.IN_PROGRESS);
 
             saveHistory(ticket, oldStatus, TicketStatus.IN_PROGRESS,
                     currentUser, "Assigned to " + request.getTechnicianId());
         }
 
-        // ❌ NO history for reassignment without status change
+        Ticket saved = ticketRepository.save(ticket);
 
-        return ticketMapper.toSummaryResponse(ticketRepository.save(ticket));
+        // Notify technician
+        userRepository.findByEmail(request.getTechnicianId()).ifPresent(tech -> {
+            notificationService.notifyUser(
+                    tech.getId(),
+                    NotificationType.TECHNICIAN_ASSIGNED,
+                    "New Ticket Assigned",
+                    "You have been assigned to ticket: " + saved.getTitle(),
+                    saved.getId(),
+                    "TICKET"
+            );
+        });
+
+        return ticketMapper.toSummaryResponse(saved);
     }
 
     // ─── DELETE ─────────────────────────────────────────────
 
-    public void deleteTicket(Long id, String currentUser) {
+    public void deleteTicket(Long id, String currentUser, Role role) {
         Ticket ticket = findTicketOrThrow(id);
 
-        if (currentUser == null || !currentUser.equals(ticket.getCreatedBy())) {
-            throw new CustomAccessDeniedException("You can only delete your own tickets");
+        // ADMIN can delete any ticket; others can only delete their own
+        if (role != Role.ADMIN) {
+            if (currentUser == null || !currentUser.equals(ticket.getCreatedBy())) {
+                throw new CustomAccessDeniedException("You can only delete your own tickets");
+            }
         }
 
         ticketRepository.delete(ticket);
+    }
+
+    // Keep backward compatibility
+    public void deleteTicket(Long id, String currentUser) {
+        deleteTicket(id, currentUser, Role.USER);
+    }
+
+    // ─── ROLE VALIDATION HELPERS ────────────────────────────
+
+    /**
+     * Validates that the user has permission to update ticket status.
+     * Only ADMIN or the assigned TECHNICIAN can update status.
+     */
+    public void validateStatusUpdatePermission(Long ticketId, com.paf.backend.model.User user) {
+        if (user.getRole() == Role.ADMIN) return;
+
+        Ticket ticket = findTicketOrThrow(ticketId);
+
+        if (user.getRole() == Role.TECHNICIAN
+                && user.getEmail().equals(ticket.getAssignedTo())) {
+            return;
+        }
+
+        throw new CustomAccessDeniedException(
+                "Only admins or assigned technicians can update ticket status");
+    }
+
+    /**
+     * Validates that the user has permission to assign a technician.
+     * Only ADMIN can assign technicians.
+     */
+    public void validateAssignPermission(com.paf.backend.model.User user) {
+        if (user.getRole() != Role.ADMIN) {
+            throw new CustomAccessDeniedException("Only admins can assign technicians");
+        }
     }
 
     // ─── ACTIVITY FEED ──────────────────────────────────────
