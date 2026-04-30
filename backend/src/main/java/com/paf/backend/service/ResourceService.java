@@ -25,8 +25,6 @@ public class ResourceService {
 
     private final ResourceRepository resourceRepository;
 
-    // ─── SEARCH / LIST ───────────────────────────────────────
-
     @Transactional(readOnly = true)
     public PagedResponse<ResourceResponse> searchResources(
             ResourceType type,
@@ -53,8 +51,6 @@ public class ResourceService {
                 .build();
     }
 
-    // ─── GET BY ID ───────────────────────────────────────────
-
     @Transactional(readOnly = true)
     public ResourceResponse getResourceById(Long id) {
         Resource resource = resourceRepository.findById(id)
@@ -62,8 +58,6 @@ public class ResourceService {
                         "Resource not found with id: " + id));
         return toResponse(resource);
     }
-
-    // ─── CREATE ──────────────────────────────────────────────
 
     public ResourceResponse createResource(ResourceRequest request) {
         Resource resource = Resource.builder()
@@ -79,8 +73,6 @@ public class ResourceService {
 
         return toResponse(resourceRepository.save(resource));
     }
-
-    // ─── UPDATE ──────────────────────────────────────────────
 
     public ResourceResponse updateResource(Long id, ResourceRequest request) {
         Resource resource = resourceRepository.findById(id)
@@ -102,8 +94,6 @@ public class ResourceService {
         return toResponse(resourceRepository.save(resource));
     }
 
-    // ─── DELETE (soft) ───────────────────────────────────────
-
     public void deleteResource(Long id) {
         Resource resource = resourceRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -113,21 +103,19 @@ public class ResourceService {
         resourceRepository.save(resource);
     }
 
-    // ─── MAPPER ──────────────────────────────────────────────
-
-    private ResourceResponse toResponse(Resource r) {
+    private ResourceResponse toResponse(Resource resource) {
         return ResourceResponse.builder()
-                .id(r.getId())
-                .name(r.getName())
-                .type(r.getType())
-                .capacity(r.getCapacity())
-                .location(r.getLocation())
-                .description(r.getDescription())
-                .availabilityStart(r.getAvailabilityStart())
-                .availabilityEnd(r.getAvailabilityEnd())
-                .status(r.getStatus())
-                .createdAt(r.getCreatedAt())
-                .updatedAt(r.getUpdatedAt())
+                .id(resource.getId())
+                .name(resource.getName())
+                .type(resource.getType())
+                .capacity(resource.getCapacity())
+                .location(resource.getLocation())
+                .description(resource.getDescription())
+                .availabilityStart(resource.getAvailabilityStart())
+                .availabilityEnd(resource.getAvailabilityEnd())
+                .status(resource.getStatus())
+                .createdAt(resource.getCreatedAt())
+                .updatedAt(resource.getUpdatedAt())
                 .build();
     }
 }

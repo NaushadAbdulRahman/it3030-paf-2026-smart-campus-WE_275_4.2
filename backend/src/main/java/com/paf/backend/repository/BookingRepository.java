@@ -4,7 +4,6 @@ import com.paf.backend.enums.BookingStatus;
 import com.paf.backend.model.Booking;
 import com.paf.backend.model.User;
 import org.springframework.data.domain.Page;
-import java.util.List;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -13,11 +12,11 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, Long> {
 
-    /** Detects time-slot conflicts for APPROVED bookings on the same resource & date. */
     @Query("SELECT COUNT(b) > 0 FROM Booking b WHERE " +
             "b.resource.id = :resourceId AND " +
             "b.date = :date AND " +

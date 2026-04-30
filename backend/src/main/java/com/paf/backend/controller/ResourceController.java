@@ -21,9 +21,6 @@ public class ResourceController {
 
     private final ResourceService resourceService;
 
-    /**
-     * GET /api/resources — Public — search/filter with pagination
-     */
     @GetMapping
     public ResponseEntity<ApiResponse<PagedResponse<ResourceResponse>>> getResources(
             @RequestParam(required = false) ResourceType type,
@@ -38,18 +35,12 @@ public class ResourceController {
                         resourceService.searchResources(type, location, minCapacity, status, page, size)));
     }
 
-    /**
-     * GET /api/resources/{id} — Public
-     */
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<ResourceResponse>> getResource(@PathVariable Long id) {
         return ResponseEntity.ok(
                 ApiResponse.success(resourceService.getResourceById(id)));
     }
 
-    /**
-     * POST /api/resources — ADMIN only (enforced by SecurityConfig + role check)
-     */
     @PostMapping
     public ResponseEntity<ApiResponse<ResourceResponse>> createResource(
             @Valid @RequestBody ResourceRequest request) {
@@ -59,9 +50,6 @@ public class ResourceController {
                         resourceService.createResource(request)));
     }
 
-    /**
-     * PUT /api/resources/{id} — ADMIN only
-     */
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<ResourceResponse>> updateResource(
             @PathVariable Long id,
@@ -72,9 +60,6 @@ public class ResourceController {
                         resourceService.updateResource(id, request)));
     }
 
-    /**
-     * DELETE /api/resources/{id} — ADMIN only (soft delete)
-     */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteResource(@PathVariable Long id) {
         resourceService.deleteResource(id);
